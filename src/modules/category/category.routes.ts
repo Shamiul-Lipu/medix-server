@@ -21,7 +21,7 @@ router.put(
 
 router.delete(
   "/:id",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.SELLER),
   CategoryController.deleteCategory,
 );
 

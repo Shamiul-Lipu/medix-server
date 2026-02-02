@@ -35,7 +35,8 @@ model User {
   orders     Order[]     @relation("CustomerOrders")
   cartItems  CartItem[]
   reviews    Review[]
-  orderItems OrderItem[] // For seller's order items
+  orderItems OrderItem[]
+  categories Category[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,6 +75,8 @@ model Category {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
 
   // Relations
   medicines Medicine[]

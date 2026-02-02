@@ -5,7 +5,9 @@ import { AuthUser } from "../../types/user.types";
 
 interface CreateCategoryPayload {
   name: string;
-  description?: string;
+  description: string | null;
+  isActive: boolean;
+  createdById: string;
 }
 
 interface UpdateCategoryPayload {
@@ -21,8 +23,13 @@ const getAllCategories = async () => {
 };
 
 const createCategory = async (data: CreateCategoryPayload, user: AuthUser) => {
-  const existing = await prisma.category.findUnique({
-    where: { name: data.name },
+  const existing = await prisma.category.findFirst({
+    where: {
+      name: {
+        equals: data.name.trim(),
+        mode: "insensitive",
+      },
+    },
   });
 
   if (existing) {
@@ -30,7 +37,10 @@ const createCategory = async (data: CreateCategoryPayload, user: AuthUser) => {
   }
 
   return await prisma.category.create({
-    data,
+    data: {
+      ...data,
+      createdById: user.id,
+    },
   });
 };
 
@@ -45,6 +55,10 @@ const updateCategory = async (
 
   if (!category) {
     throw new AppError(404, "Category not found");
+  }
+
+  if (user.role === UserRole.SELLER && category.createdById !== user.id) {
+    throw new AppError(403, "You can only update categories you have created.");
   }
 
   if (payload.name && payload.name !== category.name) {
@@ -63,14 +77,7 @@ const updateCategory = async (
   if (payload.name) updateData.name = payload.name;
   if (payload.description !== undefined)
     updateData.description = payload.description;
-
-  // Only admins can change isActive status
-  if (payload.isActive !== undefined) {
-    if (user.role !== UserRole.ADMIN) {
-      throw new AppError(403, "Only admins can change category status");
-    }
-    updateData.isActive = payload.isActive;
-  }
+  if (payload.isActive !== undefined) updateData.isActive = payload.isActive;
 
   return await prisma.category.update({
     where: { id },
@@ -78,32 +85,85 @@ const updateCategory = async (
   });
 };
 
-const deleteCategory = async (id: string) => {
+export const deleteCategory = async (categoryId: string, user: AuthUser) => {
+  // Fetch category with medicines
   const category = await prisma.category.findUnique({
-    where: { id },
+    where: { id: categoryId },
+    include: { medicines: true },
   });
 
-  if (!category) {
-    throw new AppError(404, "Category not found");
+  if (!category) throw new AppError(404, "Category not found");
+
+  const isAdmin = user.role === UserRole.ADMIN;
+
+  // Seller ownership check
+  if (!isAdmin && category.createdById !== user.id) {
+    throw new AppError(403, "You are not allowed to delete this category");
   }
 
-  // Check if category has medicines
-  const medicineCount = await prisma.medicine.count({
-    where: { categoryId: id },
+  // Fetch Admin user (needed only if seller deletes and reassignment is required)
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim();
+  if (!ADMIN_EMAIL) throw new AppError(500, "Admin email not configured");
+
+  const adminUser = await prisma.user.findUnique({
+    where: { email: ADMIN_EMAIL },
+  });
+  if (!adminUser) throw new AppError(500, "Admin user not found");
+
+  let deletedMedicines = 0;
+  let reassignedMedicines = 0;
+
+  await prisma.$transaction(async (tx) => {
+    if (isAdmin) {
+      // Admin deletes all medicines
+      const allMedicineIds = category.medicines.map((m) => m.id);
+
+      if (allMedicineIds.length > 0) {
+        deletedMedicines = allMedicineIds.length;
+        await tx.medicine.deleteMany({ where: { id: { in: allMedicineIds } } });
+      }
+    } else {
+      // Seller deletes only their own medicines
+      const sellerMedicineIds = category.medicines
+        .filter((med) => med.sellerId === user.id)
+        .map((med) => med.id);
+
+      deletedMedicines = sellerMedicineIds.length;
+      const otherSellerMedicines = category.medicines.filter(
+        (med) => med.sellerId !== user.id,
+      );
+
+      // Delete seller's medicines
+      if (sellerMedicineIds.length > 0) {
+        await tx.medicine.deleteMany({
+          where: { id: { in: sellerMedicineIds } },
+        });
+      }
+
+      reassignedMedicines = otherSellerMedicines.length;
+      // Reassign other sellers' medicines to admin category
+      if (otherSellerMedicines.length > 0) {
+        const adminCategory = await tx.category.create({
+          data: {
+            name: category.name,
+            description: category.description || "",
+            createdById: adminUser.id,
+            isActive: category.isActive,
+          },
+        });
+
+        await tx.medicine.updateMany({
+          where: { id: { in: otherSellerMedicines.map((m) => m.id) } },
+          data: { categoryId: adminCategory.id },
+        });
+      }
+    }
+
+    // Delete the category itself
+    await tx.category.delete({ where: { id: categoryId } });
   });
 
-  if (medicineCount > 0) {
-    throw new AppError(
-      400,
-      `Cannot delete category with ${medicineCount} associated medicines. Deactivate instead.`,
-    );
-  }
-
-  // Soft delete (set isActive to false)
-  return await prisma.category.update({
-    where: { id },
-    data: { isActive: false },
-  });
+  return { deletedMedicines, reassignedMedicines, categoryName: category.name };
 };
 
 export const CategoryService = {
