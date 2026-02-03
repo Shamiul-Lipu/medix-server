@@ -35,7 +35,7 @@ const getOrderById = asyncHandler(async (req, res) => {
 });
 
 const updateOrderItemStatus = asyncHandler(async (req, res) => {
-  const result = await OrderService.updateOrderItemStatus(
+  const result = await OrderService.updateOrderStatus(
     req.params.itemId as string,
     req.body.status,
     req.user!,

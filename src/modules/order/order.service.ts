@@ -23,6 +23,14 @@ interface CreateOrderPayload {
   }[];
 }
 
+const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PLACED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+  [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  [OrderStatus.CANCELLED]: [],
+};
+
 const createOrder = async (payload: CreateOrderPayload, user: AuthUser) => {
   if (!payload.items || payload.items.length === 0) {
     throw new AppError(400, "Order must contain at least one item");
@@ -268,73 +276,60 @@ const getOrderById = async (orderId: string, user: AuthUser) => {
   return order;
 };
 
-const updateOrderItemStatus = async (
-  itemId: string,
-  newStatus: OrderStatus, // Now working with OrderStatus instead of OrderItemStatus
+const updateOrderStatus = async (
+  orderId: string,
+  newStatus: OrderStatus,
   user: AuthUser,
 ) => {
-  const orderItem = await prisma.orderItem.findUnique({
-    where: { id: itemId },
-    include: {
-      order: true, // Include the order itself to check the overall order status
-    },
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
   });
 
-  if (!orderItem) {
-    throw new AppError(404, "Order item not found");
+  if (!order) {
+    throw new AppError(404, "Order not found");
   }
 
-  // Seller can only update own items
-  if (user.role === UserRole.SELLER && orderItem.sellerId !== user.id) {
-    throw new AppError(403, "You can only update your own order items");
+  // Seller must own at least one item in the order
+  if (user.role === UserRole.SELLER) {
+    const ownsItem = order.items.some((item) => item.sellerId === user.id);
+
+    if (!ownsItem) {
+      throw new AppError(403, "You are not part of this order");
+    }
+
+    // Sellers cannot cancel
+    if (newStatus === OrderStatus.CANCELLED) {
+      throw new AppError(403, "Sellers cannot cancel orders");
+    }
   }
 
-  // Ensure that the seller is not updating after an item is shipped
-  if (
-    user.role === UserRole.SELLER &&
-    orderItem.order.status === OrderStatus.SHIPPED
-  ) {
+  // Customers cannot update status (except cancel via separate flow)
+  if (user.role === UserRole.CUSTOMER) {
+    throw new AppError(403, "Customers cannot update order status");
+  }
+
+  // Validate transition
+  const allowedNextStatuses = ORDER_TRANSITIONS[order.status];
+  if (!allowedNextStatuses.includes(newStatus)) {
     throw new AppError(
-      403,
-      "Cannot update item after the order has been shipped",
+      400,
+      `Invalid status transition from ${order.status} to ${newStatus}`,
     );
   }
 
-  // Update the order status
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderItem.orderId },
-    data: { status: newStatus },
+  const data: Prisma.OrderUpdateInput = {
+    status: newStatus,
+  };
+
+  if (newStatus === OrderStatus.DELIVERED) {
+    data.deliveredAt = new Date();
+  }
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data,
   });
-
-  // Check if all items in the order are delivered or cancelled
-  const allItems = await prisma.orderItem.findMany({
-    where: { orderId: orderItem.orderId },
-  });
-
-  // const allDelivered = allItems.every(
-  //   (item) => item.status === OrderStatus.DELIVERED, // Check for item-level delivered status
-  // );
-  // const allCancelled = allItems.every(
-  //   (item) => item.status === OrderStatus.CANCELLED, // Check for item-level cancelled status
-  // );
-
-  // Update the order status to DELIVERED or CANCELLED based on the items
-  // if (allDelivered) {
-  //   await prisma.order.update({
-  //     where: { id: orderItem.orderId },
-  //     data: {
-  //       status: OrderStatus.DELIVERED,
-  //       deliveredAt: new Date(),
-  //     },
-  //   });
-  // } else if (allCancelled) {
-  //   await prisma.order.update({
-  //     where: { id: orderItem.orderId },
-  //     data: { status: OrderStatus.CANCELLED },
-  //   });
-  // }
-
-  return updatedOrder;
 };
 
 const cancelOrder = async (
@@ -403,6 +398,6 @@ export const OrderService = {
   createOrder,
   getAllOrders,
   getOrderById,
-  updateOrderItemStatus,
+  updateOrderStatus,
   cancelOrder,
 };
