@@ -1,4 +1,4 @@
-import { UserRole } from "../../../generated/prisma/enums";
+import { OrderStatus, UserRole } from "../../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/globalErrorHandler";
 
@@ -14,9 +14,6 @@ const getUser = async (
 ) => {
   const { id, role } = user;
 
-  /**
-   * COMMON USER BASE (shared by all roles)
-   */
   const baseUser = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -36,11 +33,6 @@ const getUser = async (
     throw new AppError(404, "User not found");
   }
 
-  /**
-   * ROLE-BASED BUSINESS LOGIC
-   * -------------------------
-   * Everything lives here as requested.
-   */
   if (role === UserRole.CUSTOMER) {
     const [orderCount, cartCount, reviewCount, recentOrders] =
       await Promise.all([
@@ -78,20 +70,14 @@ const getUser = async (
   }
 
   if (role === UserRole.SELLER) {
-    const [medicineCount, lowStockCount, pendingOrderItems, recentOrderItems] =
+    const [medicineCount, lowStockCount, pendingOrders, recentOrderItems] =
       await Promise.all([
-        prisma.medicine.count({
-          where: { sellerId: id },
-        }),
-        prisma.medicine.count({
+        prisma.medicine.count({ where: { sellerId: id } }),
+        prisma.medicine.count({ where: { sellerId: id, stock: { lte: 5 } } }),
+        prisma.order.count({
           where: {
-            sellerId: id,
-            stock: { lte: 5 },
-          },
-        }),
-        prisma.orderItem.count({
-          where: {
-            sellerId: id,
+            status: OrderStatus.PLACED,
+            items: { some: { sellerId: id } },
           },
         }),
         prisma.orderItem.findMany({
@@ -100,15 +86,9 @@ const getUser = async (
           take: 5,
           select: {
             id: true,
-
             quantity: true,
             subtotal: true,
-            order: {
-              select: {
-                id: true,
-                createdAt: true,
-              },
-            },
+            order: { select: { id: true, createdAt: true } },
             medicineNameSnapshot: true,
           },
         }),
@@ -119,7 +99,7 @@ const getUser = async (
       dashboard: {
         totalMedicines: medicineCount,
         lowStockMedicines: lowStockCount,
-        pendingOrders: pendingOrderItems,
+        pendingOrders,
         recentOrderItems,
       },
     };
