@@ -3,7 +3,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { CategoryService } from "./category.service";
 
 const getAllCategories = asyncHandler(async (req, res) => {
-  const result = await CategoryService.getAllCategories();
+  const result = await CategoryService.getAllCategories(req.query);
 
   res.status(200).json({
     success: true,

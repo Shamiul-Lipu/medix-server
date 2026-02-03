@@ -17,6 +17,8 @@ interface GetAllMedicinesParams {
   skip?: number;
   sortBy?: keyof Prisma.MedicineOrderByWithRelationInput;
   sortOrder?: "asc" | "desc";
+  sortByStock?: boolean;
+  sortOrderStock?: "asc" | "desc";
 }
 
 interface CreateMedicinePayload {
@@ -102,6 +104,15 @@ const getAllMedicines = async (params: GetAllMedicinesParams = {}) => {
   if (params.sortBy) orderBy[params.sortBy] = params.sortOrder || "desc";
   else orderBy.createdAt = "desc";
 
+  // Priority: sort by stock if requested
+  if (params.sortByStock) {
+    orderBy.stock = params.sortOrderStock || "asc"; // default ascending
+  } else if (params.sortBy) {
+    orderBy[params.sortBy] = params.sortOrder || "desc";
+  } else {
+    orderBy.createdAt = "desc"; // fallback
+  }
+
   // Fetch data
   const [medicines, total] = await Promise.all([
     prisma.medicine.findMany({
@@ -118,13 +129,13 @@ const getAllMedicines = async (params: GetAllMedicinesParams = {}) => {
   ]);
 
   return {
-    data: medicines,
     pagination: {
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     },
+    data: medicines,
   };
 };
 
@@ -146,7 +157,6 @@ const getMedicineById = async (id: string, user?: AuthUser) => {
         },
       },
       reviews: {
-        where: { orderItem: { status: "DELIVERED" } },
         select: {
           id: true,
           rating: true,
@@ -291,9 +301,7 @@ const deleteMedicine = async (id: string, user: AuthUser) => {
   const activeOrderItems = await prisma.orderItem.count({
     where: {
       medicineId: id,
-      status: {
-        in: ["PLACED", "PROCESSING", "SHIPPED"],
-      },
+      order: { status: { in: ["PLACED", "PROCESSING", "SHIPPED"] } },
     },
   });
 

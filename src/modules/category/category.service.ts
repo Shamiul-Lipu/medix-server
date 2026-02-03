@@ -16,10 +16,54 @@ interface UpdateCategoryPayload {
   isActive?: boolean;
 }
 
-const getAllCategories = async () => {
-  return await prisma.category.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+interface GetCategoriesParams {
+  page?: string | number;
+  limit?: string | number;
+  searchTerm?: string;
+}
+
+const getAllCategories = async ({
+  page = 1,
+  limit = 20,
+  searchTerm = "",
+}: GetCategoriesParams) => {
+  const parsedPage = typeof page === "string" ? parseInt(page, 10) : page;
+  const parsedLimit = typeof limit === "string" ? parseInt(limit, 10) : limit;
+  const skip = (parsedPage - 1) * parsedLimit;
+
+  const [categories, total] = await prisma.$transaction([
+    prisma.category.findMany({
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: parsedLimit,
+      where: {
+        name: {
+          contains: searchTerm,
+          mode: "insensitive",
+        },
+      },
+    }),
+    prisma.category.count({
+      where: {
+        name: {
+          contains: searchTerm,
+          mode: "insensitive",
+        },
+      },
+    }),
+  ]);
+
+  const totalPages = Math.ceil(total / parsedLimit);
+
+  return {
+    data: categories,
+    pagination: {
+      total,
+      page: parsedPage,
+      limit: parsedLimit,
+      totalPages,
+    },
+  };
 };
 
 const createCategory = async (data: CreateCategoryPayload, user: AuthUser) => {
