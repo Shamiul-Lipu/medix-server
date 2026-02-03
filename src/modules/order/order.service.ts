@@ -101,7 +101,7 @@ const createOrder = async (payload: CreateOrderPayload, user: AuthUser) => {
         customerId: user.id,
         totalAmount,
         paymentMethod: "COD",
-        status: OrderStatus.PLACED, // Set status for the order
+        status: OrderStatus.PLACED,
         shippingName: payload.shippingName,
         shippingPhone: payload.shippingPhone,
         shippingAddress: payload.shippingAddress,
@@ -172,7 +172,7 @@ const getAllOrders = async (filters: OrderFilters, user: AuthUser) => {
       select: {
         id: true,
         totalAmount: true,
-        status: true, // This is still needed at the Order level
+        status: true,
         paymentMethod: true,
         shippingName: true,
         shippingPhone: true,
@@ -265,7 +265,6 @@ const getOrderById = async (orderId: string, user: AuthUser) => {
   }
 
   if (user.role === UserRole.SELLER) {
-    // Filter to show only seller's items
     const sellerItems = order.items.filter((item) => item.sellerId === user.id);
     if (sellerItems.length === 0) {
       throw new AppError(403, "This order does not contain your items");
@@ -290,7 +289,6 @@ const updateOrderStatus = async (
     throw new AppError(404, "Order not found");
   }
 
-  // Seller must own at least one item in the order
   if (user.role === UserRole.SELLER) {
     const ownsItem = order.items.some((item) => item.sellerId === user.id);
 
@@ -304,7 +302,6 @@ const updateOrderStatus = async (
     }
   }
 
-  // Customers cannot update status (except cancel via separate flow)
   if (user.role === UserRole.CUSTOMER) {
     throw new AppError(403, "Customers cannot update order status");
   }
@@ -364,7 +361,6 @@ const cancelOrder = async (
     OrderStatus.PROCESSING,
   ];
 
-  // We now know that `order.status` is a valid `OrderStatus`, and this check works
   if (
     user.role === UserRole.CUSTOMER &&
     !canCancelStatuses.includes(order.status)
