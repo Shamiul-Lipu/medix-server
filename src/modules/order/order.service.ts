@@ -193,18 +193,22 @@ const getAllOrders = async (filters: OrderFilters, user: AuthUser) => {
                 select: {
                   id: true,
                   medicineNameSnapshot: true,
+                  medicineId: true,
                   quantity: true,
                   priceSnapshot: true,
                   subtotal: true,
+                  review: true,
                 },
               }
             : {
                 select: {
                   id: true,
+                  medicineId: true,
                   medicineNameSnapshot: true,
                   quantity: true,
                   priceSnapshot: true,
                   subtotal: true,
+                  review: true,
                 },
               },
       },

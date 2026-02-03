@@ -5,6 +5,7 @@ import { CategoryRoutes } from "../modules/category/category.routes";
 import { MedicineRoutes } from "../modules/medicine/medicine.route";
 import { OrderRoutes } from "../modules/order/order.route";
 import { CartRoutes } from "../modules/cart/cart.route";
+import { ReviewRoutes } from "../modules/review/review.route";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use("/category", CategoryRoutes);
 router.use("/medicine", MedicineRoutes);
 router.use("/order", OrderRoutes);
 router.use("/cart", CartRoutes);
+router.use("/review", ReviewRoutes);
 
 export const allApiRoutes = router;
