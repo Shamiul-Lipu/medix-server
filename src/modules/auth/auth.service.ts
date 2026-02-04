@@ -48,7 +48,6 @@ const getUser = async (
         prisma.order.findMany({
           where: { customerId: id },
           orderBy: { createdAt: "desc" },
-          take: 5,
           select: {
             id: true,
             status: true,
