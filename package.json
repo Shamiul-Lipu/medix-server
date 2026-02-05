@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc"
+    "build": "tsup src/server.ts --format esm --target node20 --clean --outDir dist --external @prisma/client"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.1.0",
     "prisma": "^7.3.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
