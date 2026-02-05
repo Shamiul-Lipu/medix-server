@@ -16,7 +16,8 @@ Built with Node.js, Express, Prisma and PostgreSQL.
 
 ➡️ [Medix Database Schema](https://dbdiagram.io/d/medix-69777d08bd82f5fce2a2cf82)
 
-<!-- [![Database Diagram](schema.png)](https://dbdiagram.io/d/medix-697) -->
+[![Database Diagram](https://raw.githubusercontent.com/Shamiul-Lipu/medix-server/main/medixdiagram.png)](https://dbdiagram.io/d/medix-697)
+
 
 ---
 
